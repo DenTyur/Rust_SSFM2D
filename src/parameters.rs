@@ -68,9 +68,10 @@ impl Xspace {
             x0: x0.clone(), // костыль!
             dx: dx.clone(),
             n: n.clone(),
-            grid: Vec::from_iter(0..x0.len()) // тоже костыль! как это сделать через функцию?
-                .iter()
-                .map(|&i| Array::linspace(x0[i], x0[i] + dx[i] * (n[i] - 1) as f64, n[i]))
+            grid: (0..x0.len()) // тоже костыль! как это сделать через функцию?
+                .into_iter()
+                .map(|i| Array::linspace(x0[i], x0[i] + dx[i] * (n[i] - 1) as f64, n[i]))
+                // переписать через x0 + dx*arrange(N)
                 .collect(),
         }
     }

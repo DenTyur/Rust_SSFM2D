@@ -73,8 +73,8 @@ pub fn demodify_psi(psi: &mut WaveFunction, x: &Xspace, p: &Pspace) {
                 .iter_mut()
                 .zip(x.grid[1].iter())
                 .for_each(|(psi_elem, y_k)| {
-                    *psi_elem *=
-                        x.dx[0] * x.dx[1] / (2. * PI) * (j * (p.p0[0] * x_i + p.p0[1] * y_k)).exp();
+                    *psi_elem *= (2. * PI) / (x.dx[0] * x.dx[1])
+                        * (j * (p.p0[0] * x_i + p.p0[1] * y_k)).exp();
                 })
         });
 }

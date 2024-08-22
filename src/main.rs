@@ -15,7 +15,7 @@ use std::time::Instant;
 
 fn main() {
     // задаем параметры временной сетки
-    let mut t = Tspace::new(0., 0.1, 10, 5);
+    let mut t = Tspace::new(0., 0.1, 10, 20);
 
     // задаем координатную сетку
     let x = Xspace::new(vec![-5.115, -5.115], vec![0.01, 0.01], vec![1024, 1024]);
@@ -61,6 +61,7 @@ fn time_step_evol(
 
     for _i in 0..t.n_steps - 1 {
         fft.do_fft(psi);
+        // Можно оптимизировать p_evol
         p_evol(psi, p, t.dt);
         fft.do_ifft(psi);
         x_evol(psi, u, t.dt);
