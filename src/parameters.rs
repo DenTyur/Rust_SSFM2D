@@ -1,21 +1,32 @@
-use ndarray::prelude::*;
+extern crate fstrings;
 
-#[derive(Debug, Clone, Copy)]
-pub struct TimeParameters {
+use ndarray::prelude::*;
+use ndarray_npy::{ReadNpyError, ReadNpyExt, WriteNpyError, WriteNpyExt};
+use std::f64::consts::PI;
+use std::fs::File;
+use std::io::BufWriter;
+
+#[derive(Debug, Clone)]
+pub struct Tspace {
     // параметры временной сетки
     pub t0: f64,
     pub dt: f64,
     pub n_steps: usize,
     pub nt: usize,
+    pub current: f64,
+    pub grid: Array<f64, Ix1>,
 }
 
-impl TimeParameters {
+impl Tspace {
     pub fn new(t0: f64, dt: f64, n_steps: usize, nt: usize) -> Self {
         Self {
             t0,
             dt,
             n_steps,
             nt,
+            current: t0,
+            // костыль
+            grid: Array::linspace(t0, t0 + dt * n_steps as f64 * (nt - 1) as f64, nt),
         }
     }
 
@@ -35,51 +46,129 @@ impl TimeParameters {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct XspaceParameters {
+#[derive(Debug, Clone)]
+pub struct Xspace {
+    // размерность пространства
+    pub dim: usize,
     // параметры координатной сетки
-    pub x0: f64,
-    pub dx: f64,
-    pub n: usize,
+    pub x0: Vec<f64>,
+    pub dx: Vec<f64>,
+    pub n: Vec<usize>,
+    // сетка
+    pub grid: Vec<Array<f64, Ix1>>,
 }
 
-impl XspaceParameters {
-    pub fn new(x0: f64, dx: f64, n: usize) -> Self {
-        Self { x0, dx, n }
-    }
-
-    pub fn last(&self) -> f64 {
-        // Возвращает последний элемент координатной сетки
-        self.x0 + self.dx * (self.n - 1) as f64
-    }
-
-    pub fn get_grid(&self) -> Array<f64, Ix1> {
-        Array::linspace(self.x0, self.last(), self.n)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct PspaceParameters {
-    pub p0: f64,
-    pub dp: f64,
-    pub n: usize,
-}
-
-impl PspaceParameters {
-    pub fn init(prs: XspaceParameters) -> Self {
+impl Xspace {
+    pub fn new(x0: Vec<f64>, dx: Vec<f64>, n: Vec<usize>) -> Self {
+        // Как записать assert(x0.len()==dx.len()==n.len())?
+        assert_eq!(x0.len(), dx.len(), "Dimension Error");
+        assert_eq!(n.len(), dx.len(), "Dimension Error");
         Self {
-            p0: -3.14 / prs.dx,
-            dp: 2. * 3.14 / (prs.n as f64 * prs.dx),
-            n: prs.n,
+            dim: x0.len(),
+            x0: x0.clone(), // костыль!
+            dx: dx.clone(),
+            n: n.clone(),
+            grid: Vec::from_iter(0..x0.len()) // тоже костыль! как это сделать через функцию?
+                .iter()
+                .map(|&i| Array::linspace(x0[i], x0[i] + dx[i] * (n[i] - 1) as f64, n[i]))
+                .collect(),
         }
     }
 
-    pub fn last(&self) -> f64 {
-        // Возвращает последний элемент импульсной сетки
-        self.p0 + self.dp * (self.n - 1) as f64
+    pub fn load(dir_path: &str, dim: usize) -> Self {
+        // Загружает массивы координат из файлов.
+        //
+        // dir_path - путь к директории с координатными массивами. Массивы
+        // в этой директории должны называться: x0.png, x1.png, x2.png и так
+        // далее в зависимости от размерности пространства.
+        // Всего таких массивов в этой директории dir_path должо быть dim штук.
+        //
+        // dim - размерность пространства.
+
+        let mut x: Vec<Array<f64, Ix1>> = Vec::new();
+        let mut x0: Vec<f64> = Vec::new();
+        let mut dx: Vec<f64> = Vec::new();
+        let mut n: Vec<usize> = Vec::new();
+
+        for i in 0..dim {
+            let x_path = String::from(dir_path) + f!("x{i}.npy").as_str();
+            let reader = File::open(x_path).unwrap();
+            x.push(Array1::<f64>::read_npy(reader).unwrap());
+            x0.push(x[i][[0]]);
+            dx.push(x[i][[1]] - x[i][[0]]);
+            n.push(x[i].len());
+        }
+        Self {
+            dim: dim,
+            x0: x0,
+            dx: dx,
+            n: n,
+            grid: x,
+        }
     }
 
-    pub fn get_grid(&self) -> Array<f64, Ix1> {
-        Array::linspace(self.p0, self.last(), self.n)
+    pub fn save(&self, dir_path: &str) -> Result<(), WriteNpyError> {
+        // Сохраняет массивы координат в файлы
+        //
+        // dir_path - путь к папке, в которую будут сохранены массивы.
+        //
+        // Массивы сохраняются с названиями x0.png, x1.png, x2.png и так
+        // далее в зависимости от размерности пространства.
+
+        for i in 0..self.dim {
+            let x_path = String::from(dir_path) + f!("/x{i}.npy").as_str();
+            let writer = BufWriter::new(File::create(x_path)?);
+            self.grid[i].write_npy(writer)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Pspace {
+    // размерность пространства
+    pub dim: usize,
+    // параметры импульсной сетки
+    pub p0: Vec<f64>,
+    pub dp: Vec<f64>,
+    pub n: Vec<usize>,
+    // сетка
+    pub grid: Vec<Array<f64, Ix1>>,
+}
+
+impl Pspace {
+    pub fn init(x: &Xspace) -> Self {
+        let p0 = x.dx.iter().map(|&dx| -PI / dx).collect::<Vec<_>>();
+        let dp =
+            x.n.iter()
+                .zip(x.dx.iter())
+                .map(|(&n, &dx)| 2. * PI / (n as f64 * dx))
+                .collect::<Vec<_>>();
+        Self {
+            dim: x.dim.clone(),
+            p0: p0.clone(),
+            dp: dp.clone(),
+            n: x.n.clone(),
+            grid: Vec::from_iter(0..p0.len()) // тоже костыль!
+                .iter()
+                .map(|&i| Array::linspace(p0[i], p0[i] + dp[i] * (x.n[i] - 1) as f64, x.n[i]))
+                .collect(),
+        }
+    }
+
+    pub fn save(&self, dir_path: &str) -> Result<(), WriteNpyError> {
+        // Сохраняет массивы импульсов в файлы
+        //
+        // dir_path - путь к папке, в которую будут сохранены массивы.
+        //
+        // Массивы сохраняются с названиями p0.png, p1.png, p2.png и так
+        // далее в зависимости от размерности пространства.
+
+        for i in 0..self.dim {
+            let p_path = String::from(dir_path) + f!("p{i}.npy").as_str();
+            let writer = BufWriter::new(File::create(p_path)?);
+            self.grid[i].write_npy(writer)?;
+        }
+        Ok(())
     }
 }
