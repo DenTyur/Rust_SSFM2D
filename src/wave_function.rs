@@ -56,4 +56,17 @@ impl WaveFunction {
         self.psi.write_npy(writer)?;
         Ok(())
     }
+
+    pub fn load2d(psi_path: &str) -> Self {
+        // Загружает волновую функцию из файла.
+        //
+        // psi_path - путь к массиву волновой функции.
+        //
+        // dim - размерность пространства.
+
+        let reader = File::open(psi_path).unwrap();
+        Self {
+            psi: Array::<Complex<f64>, Ix2>::read_npy(reader).unwrap(),
+        }
+    }
 }

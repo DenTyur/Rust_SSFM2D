@@ -36,4 +36,15 @@ impl Potentials {
         self.u.write_npy(writer)?;
         Ok(())
     }
+
+    pub fn load2d(u_path: &str) -> Self {
+        // Загружает потенциал из файла.
+        //
+        // u_path - путь к массиву потенциала.
+
+        let reader = File::open(u_path).unwrap();
+        Self {
+            u: Array::<Complex<f64>, Ix2>::read_npy(reader).unwrap(),
+        }
+    }
 }

@@ -2,7 +2,6 @@
 extern crate fstrings;
 
 mod evol;
-mod npy_helper;
 mod parameters;
 mod potentials;
 mod wave_function;
@@ -15,21 +14,23 @@ use std::time::Instant;
 
 fn main() {
     // задаем параметры временной сетки
-    let mut t = Tspace::new(0., 0.1, 10, 20);
+    let mut t = Tspace::new(0., 0.1, 20, 100);
 
     // задаем координатную сетку
-    let x = Xspace::new(vec![-5.115, -5.115], vec![0.01, 0.01], vec![1024, 1024]);
-    x.save("arrays_saved/tests").unwrap();
+    // let x = Xspace::new(vec![-5.115, -5.115], vec![0.01, 0.01], vec![1024, 1024]);
+    let x = Xspace::load("/home/denis/SSFM/SSFM2D/tests_for_rust/arrays_saved", 2);
+    x.save("arrays_saved/test_br").unwrap();
 
     // задаем импульсную сетку
     let p = Pspace::init(&x);
 
     // генерация "атомного" потенциала
-    let u = Potentials::oscillator2d(&x);
-    u.save("arrays_saved/tests/u.npy").unwrap();
+    let u = Potentials::load2d("/home/denis/SSFM/SSFM2D/tests_for_rust/arrays_saved/u.npy");
 
     // генерация начальной волновой функции psi
-    let mut psi = WaveFunction::oscillator2d(&x);
+    let mut psi = WaveFunction::load2d(
+        "/home/denis/SSFM/SSFM2D/tests_for_rust/arrays_saved/psi_bound_br_2d_128_05.npy",
+    );
     psi.normalization_by_1(&x.dx);
     println!("norm psi = {}", psi.norm(&x.dx));
 
@@ -38,7 +39,7 @@ fn main() {
 
     for i in 0..t.nt {
         // сохранение временного среза волновой функции
-        psi.save(f!("arrays_saved/tests/psi_t_{i}.npy").as_str())
+        psi.save(f!("arrays_saved/test_br/psi_t_{i}.npy").as_str())
             .unwrap();
         // эволюция на 1 шаг (t_step) по времени
         let time = Instant::now();

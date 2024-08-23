@@ -92,7 +92,7 @@ impl Xspace {
         let mut n: Vec<usize> = Vec::new();
 
         for i in 0..dim {
-            let x_path = String::from(dir_path) + f!("x{i}.npy").as_str();
+            let x_path = String::from(dir_path) + f!("/x{i}.npy").as_str();
             let reader = File::open(x_path).unwrap();
             x.push(Array1::<f64>::read_npy(reader).unwrap());
             x0.push(x[i][[0]]);
