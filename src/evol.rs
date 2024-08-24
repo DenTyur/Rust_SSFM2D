@@ -1,6 +1,9 @@
+use crate::field;
 use crate::parameters;
 use crate::potentials;
 use crate::wave_function;
+use field::Field2d;
+use itertools::multizip;
 use ndarray::prelude::*;
 use ndrustfft::{ndfft_par, ndifft_par, FftHandler};
 use num_complex::Complex;
@@ -11,38 +14,50 @@ use std::f64::consts::PI;
 use std::time::Instant;
 use wave_function::WaveFunction;
 
-pub fn x_evol_half(psi: &mut WaveFunction, u: &Potentials, dt: f64) {
+pub fn x_evol_half(
+    psi: &mut WaveFunction,
+    u: &Potentials,
+    t: &Tspace,
+    field: &Field2d,
+    x: &Xspace,
+) {
     // эволюция в координатном пространстве на половину временного шага
     let j = Complex::I;
-    psi.psi
-        .axis_iter_mut(Axis(0))
-        .zip(u.u.axis_iter(Axis(0)))
-        .par_bridge()
-        .for_each(|(mut psi_row, u_row)| {
-            psi_row
-                .iter_mut()
-                .zip(u_row.iter())
-                .for_each(|(psi_elem, u_elem)| {
-                    *psi_elem *= (-j * 0.5 * dt * u_elem).exp();
-                });
-        });
+    let u_field = field.potential(t.current, x);
+
+    multizip((
+        psi.psi.axis_iter_mut(Axis(0)),
+        u.u.axis_iter(Axis(0)),
+        u_field[0].iter(),
+    ))
+    .par_bridge()
+    .for_each(|(mut psi_row, u_row, u_field_row)| {
+        multizip((psi_row.iter_mut(), u_row.iter(), u_field[1].iter())).for_each(
+            |(psi_elem, u_elem, u_field_col)| {
+                *psi_elem *= (-j * 0.5 * t.dt * (u_elem - u_field_row - u_field_col)).exp();
+            },
+        );
+    });
 }
 
-pub fn x_evol(psi: &mut WaveFunction, u: &Potentials, dt: f64) {
+pub fn x_evol(psi: &mut WaveFunction, u: &Potentials, t: &Tspace, field: &Field2d, x: &Xspace) {
     // эволюция в координатном пространстве на временной шаг
     let j = Complex::I;
-    psi.psi
-        .axis_iter_mut(Axis(0))
-        .zip(u.u.axis_iter(Axis(0)))
-        .par_bridge()
-        .for_each(|(mut psi_row, u_row)| {
-            psi_row
-                .iter_mut()
-                .zip(u_row.iter())
-                .for_each(|(psi_elem, u_elem)| {
-                    *psi_elem *= (-j * dt * u_elem).exp();
-                });
-        });
+    let u_field = field.potential(t.current, x);
+
+    multizip((
+        psi.psi.axis_iter_mut(Axis(0)),
+        u.u.axis_iter(Axis(0)),
+        u_field[0].iter(),
+    ))
+    .par_bridge()
+    .for_each(|(mut psi_row, u_row, u_field_row)| {
+        multizip((psi_row.iter_mut(), u_row.iter(), u_field[1].iter())).for_each(
+            |(psi_elem, u_elem, u_field_col)| {
+                *psi_elem *= (-j * t.dt * (u_elem - u_field_row - u_field_col)).exp();
+            },
+        );
+    });
 }
 pub fn p_evol(psi: &mut WaveFunction, p: &Pspace, dt: f64) {
     // эволюция в импульсном пространстве
