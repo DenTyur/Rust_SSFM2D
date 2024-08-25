@@ -7,12 +7,18 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io::BufWriter;
 
-pub struct WaveFunction {
+pub struct WaveFunction<'a> {
     pub psi: Array<Complex<f64>, Ix2>,
+    x: &'a Xspace,
 }
 
-impl WaveFunction {
-    pub fn oscillator2d(x: &Xspace) -> Self {
+impl<'a> WaveFunction<'a> {
+    pub fn new(psi: Array<Complex<f64>, Ix2>, x: &'a Xspace) -> Self {
+        Self { psi, x }
+    }
+
+    // Инициализирует волновую функцию как двумерный осциллятор на основе пространственной сетки x
+    pub fn init_oscillator_2d(x: &'a Xspace) -> Self {
         let mut psi: Array<Complex<f64>, Ix2> = Array::zeros((x.n[0], x.n[1]));
         let j = Complex::I;
         psi.axis_iter_mut(Axis(0))
@@ -26,14 +32,13 @@ impl WaveFunction {
                         *psi_elem = (-0.5 * (x_i.powi(2) + y_j.powi(2))).exp() + 0. * j;
                     })
             });
-        Self { psi: psi }
+        Self { psi, x }
     }
 
-    pub fn norm(&self, dx: &Vec<f64>) -> f64 {
-        //Возвращает норму волновой функции
-
+    //Возвращает норму волновой функции
+    pub fn norm(&self) -> f64 {
         let mut volume: f64 = 1.;
-        dx.iter().for_each(|dx| volume *= dx);
+        self.x.dx.iter().for_each(|dx| volume *= dx);
         f64::sqrt(
             self.psi
                 .mapv(|a| (a.re.powi(2) + a.im.powi(2)))
@@ -43,30 +48,26 @@ impl WaveFunction {
         )
     }
 
-    pub fn normalization_by_1(&mut self, dx: &Vec<f64>) {
-        // Нормирует волновую функцию на 1
-        //
-        let norm: f64 = self.norm(dx);
+    // Нормирует волновую функцию на 1
+    pub fn normalization_by_1(&mut self) {
+        let norm: f64 = self.norm();
         let j = Complex::I;
         self.psi *= (1. + 0. * j) / norm;
     }
 
-    pub fn save(&self, path: &str) -> Result<(), WriteNpyError> {
+    // Сохраняет волновую функцию в файл
+    pub fn save_psi(&self, path: &str) -> Result<(), WriteNpyError> {
         let writer = BufWriter::new(File::create(path)?);
         self.psi.write_npy(writer)?;
         Ok(())
     }
 
-    pub fn load2d(psi_path: &str) -> Self {
-        // Загружает волновую функцию из файла.
-        //
-        // psi_path - путь к массиву волновой функции.
-        //
-        // dim - размерность пространства.
-
+    // Загружает волновую функцию из файла.
+    pub fn init_from_file(psi_path: &str, x: &'a Xspace) -> Self {
         let reader = File::open(psi_path).unwrap();
         Self {
             psi: Array::<Complex<f64>, Ix2>::read_npy(reader).unwrap(),
+            x,
         }
     }
 }

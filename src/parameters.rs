@@ -6,6 +6,11 @@ use std::f64::consts::PI;
 use std::fs::File;
 use std::io::BufWriter;
 
+pub struct Point2e1D {
+    pub x1: f64,
+    pub x2: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Tspace {
     // параметры временной сетки
@@ -73,6 +78,12 @@ impl Xspace {
                 .map(|i| Array::linspace(x0[i], x0[i] + dx[i] * (n[i] - 1) as f64, n[i]))
                 // переписать через x0 + dx*arrange(N)
                 .collect(),
+        }
+    }
+    pub fn point(&self, index: (usize, usize)) -> Point2e1D {
+        Point2e1D {
+            x1: self.grid[0][[index.0]],
+            x2: self.grid[1][[index.1]],
         }
     }
 
@@ -155,6 +166,10 @@ impl Pspace {
                 .map(|&i| Array::linspace(p0[i], p0[i] + dp[i] * (x.n[i] - 1) as f64, x.n[i]))
                 .collect(),
         }
+    }
+
+    pub fn point_abs_squared(&self, index: (usize, usize)) -> f64 {
+        self.grid[0][[index.0]].powi(2) + self.grid[1][[index.1]].powi(2)
     }
 
     pub fn save(&self, dir_path: &str) -> Result<(), WriteNpyError> {

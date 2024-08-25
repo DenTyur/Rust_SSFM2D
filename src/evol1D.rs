@@ -2,13 +2,14 @@ use crate::field;
 use crate::parameters;
 use crate::potentials;
 use crate::wave_function;
-use field::Field2e1D;
+use field::Field1D;
+use field::Field2d;
 use itertools::multizip;
 use ndarray::prelude::*;
 use ndrustfft::{ndfft_par, ndifft_par, FftHandler};
 use num_complex::Complex;
 use parameters::*;
-use potentials::AtomicPotential;
+use potentials::Potentials;
 use rayon::prelude::*;
 use std::f64::consts::PI;
 use std::time::Instant;
@@ -16,62 +17,59 @@ use wave_function::WaveFunction;
 
 pub fn x_evol_half(
     psi: &mut WaveFunction,
-    atomic_potential: &AtomicPotential,
+    u: &Potentials,
     t: &Tspace,
-    field2e1d: &Field2e1D,
+    field: &Field1D,
     x: &Xspace,
 ) {
     // эволюция в координатном пространстве на половину временного шага
     let j = Complex::I;
-
-    let ts = Instant::now();
+    // Вычисляем полный потенциал в момент времени t
+    let U = potential.total_potential(t.current, x.grig);
+    // Эволюция волновой функции
     psi.psi
         .indexed_iter_mut()
         .par_bridge()
         .for_each(|(index, psi_elem)| {
-            *psi_elem *= (-j
-                * 0.5
-                * t.dt
-                * (atomic_potential.potential[index]
-                    - field2e1d.electric_field_potential(t.current, x.point(index))))
-            .exp();
+            *psi_elem *=
+                (-j * 0.5 * t.dt * (atomic_potential[index] + field_potential(index))).exp();
+            field_potential(i, j) = -ufx(x[i]) - ufy(y[j])
         });
-    println!("TIME_evol_half = {:?}", ts.elapsed());
 }
 
-pub fn x_evol(
-    psi: &mut WaveFunction,
-    atomic_potential: &AtomicPotential,
-    t: &Tspace,
-    field2e1d: &Field2e1D,
-    x: &Xspace,
-) {
-    // эволюция в координатном пространстве на половину временного шага
+pub fn x_evol(psi: &mut WaveFunction, u: &Potentials, t: &Tspace, field: &Field2d, x: &Xspace) {
+    // эволюция в координатном пространстве на временной шаг
     let j = Complex::I;
+    let u_field = field.potential(t.current, x);
 
-    let ts = Instant::now();
-    psi.psi
-        .indexed_iter_mut()
-        .par_bridge()
-        .for_each(|(index, psi_elem)| {
-            *psi_elem *= (-j
-                * t.dt
-                * (atomic_potential.potential[index]
-                    - field2e1d.electric_field_potential(t.current, x.point(index))))
-            .exp();
-        });
-    println!("TIME_evol= {:?}", ts.elapsed());
+    multizip((
+        psi.psi.axis_iter_mut(Axis(0)),
+        u.u.axis_iter(Axis(0)),
+        u_field[0].iter(),
+    ))
+    .par_bridge()
+    .for_each(|(mut psi_row, u_row, u_field_row)| {
+        multizip((psi_row.iter_mut(), u_row.iter(), u_field[1].iter())).for_each(
+            |(psi_elem, u_elem, u_field_col)| {
+                *psi_elem *= (-j * t.dt * (u_elem - u_field_row - u_field_col)).exp();
+            },
+        );
+    });
 }
-
 pub fn p_evol(psi: &mut WaveFunction, p: &Pspace, dt: f64) {
     // эволюция в импульсном пространстве
     let j = Complex::I;
-
     psi.psi
-        .indexed_iter_mut()
+        .axis_iter_mut(Axis(0))
+        .zip(p.grid[0].iter())
         .par_bridge()
-        .for_each(|(index, psi_elem)| {
-            *psi_elem *= (-j * 0.5 * dt * p.point_abs_squared(index)).exp();
+        .for_each(|(mut psi_row, px_i)| {
+            psi_row
+                .iter_mut()
+                .zip(p.grid[1].iter())
+                .for_each(|(psi_elem, py_k)| {
+                    *psi_elem *= (-j * 0.5 * dt * (px_i.powi(2) + py_k.powi(2))).exp();
+                });
         });
 }
 
