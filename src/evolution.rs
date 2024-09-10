@@ -14,6 +14,35 @@ use std::f64::consts::PI;
 use std::time::Instant;
 use wave_function::WaveFunction;
 
+pub fn time_step_evol(
+    fft: &mut FftMaker2d,
+    psi: &mut WaveFunction,
+    field: &Field1D,
+    u: &AtomicPotential,
+    x: &Xspace,
+    p: &Pspace,
+    t: &mut Tspace,
+) {
+    modify_psi(psi, x, p);
+    x_evol_half(psi, u, t, field, x);
+
+    for _i in 0..t.n_steps - 1 {
+        fft.do_fft(psi);
+        // Можно оптимизировать p_evol
+        p_evol(psi, p, t.dt);
+        fft.do_ifft(psi);
+        x_evol(psi, u, t, field, x);
+        t.current += t.dt;
+    }
+
+    fft.do_fft(psi);
+    p_evol(psi, p, t.dt);
+    fft.do_ifft(psi);
+    x_evol_half(psi, u, t, field, x);
+    demodify_psi(psi, x, p);
+    t.current += t.dt;
+}
+
 pub fn x_evol_half(
     psi: &mut WaveFunction,
     atomic_potential: &AtomicPotential,

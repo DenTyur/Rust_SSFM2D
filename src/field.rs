@@ -49,36 +49,36 @@ impl Field1D {
         self.electric_field_time_dependence(t) * self.field_x_envelop(x)
     }
 
-    // Потенциал электрического поля в точке point в момент времени t
-    pub fn electric_field_potential(&self, t: f64, point: f64) -> f64 {
+    // Потенциал электрического поля координатный массив в момент времени t
+    pub fn potential_as_array(&self, t: f64, x: &Array<f64, Ix1>) -> Array<f64, Ix1> {
         // phi(t, x) = -E(t) * integral(field_x_envelop(x))dx
         let time_part: f64 = self.electric_field_time_dependence(t);
+        let mut space_part: Array<f64, Ix1> = x.clone();
 
         // Электрическое поле отлично от нуля в области пространства:
         // -x_envelop < x < x_envelop (*)
         // В этой области пространства производная потенциала этого поля отлична
         // от нуля. За пределами этой области потенциал -- константа, которая равна
         // потенциалу на границах области (*)
-        let space_part = match point {
-            value if value < -self.x_envelop => self.integrated_field_x_envelop(-self.x_envelop),
-            value if value > self.x_envelop => self.integrated_field_x_envelop(-self.x_envelop),
-            _ => self.integrated_field_x_envelop(point),
-        };
+        space_part.par_iter_mut().for_each(|elem| match *elem {
+            x if x < -self.x_envelop => *elem = self.integrated_field_x_envelop(-self.x_envelop),
+            x if x > self.x_envelop => *elem = self.integrated_field_x_envelop(-self.x_envelop),
+            _ => *elem = self.integrated_field_x_envelop(*elem),
+        });
         -time_part * space_part
     }
 }
 
 // ==================================
-pub struct Field2e1D {
-    pub field1d: Field1D,
-}
-
-impl Field2e1D {
-    pub fn new(field1d: Field1D) -> Self {
-        Self { field1d }
-    }
-    pub fn electric_field_potential(&self, t: f64, point: Point2e1D) -> f64 {
-        self.field1d.electric_field_potential(t, point.x1)
-            + self.field1d.electric_field_potential(t, point.x2)
-    }
-}
+// pub struct Field2e1D {
+//     pub field1d: Field1D,
+// }
+//
+// impl Field2e1D {
+//     pub fn new(field1d: Field1D) -> Self {
+//         Self { field1d }
+//     }
+//     pub fn potential(&self, t: f64, point: Point2e1D) -> f64 {
+//         self.field1d.potential(t, point.x1) + self.field1d.potential(t, point.x2)
+//     }
+// }
